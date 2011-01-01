@@ -49,7 +49,7 @@ class ThumberIndex(object):
         if reserved_keys:
             self.reserved_keys = reserved_keys
         else:
-            self.reserved_keys = []
+            self.reserved_keys = ['version']
 
     def create_thumbnail_blob_with_index(self, result_dict, extra_keys_dict = None):
         """Expects a dict like {'128x128xjpg': thumbnail_data, '64x64xjpg': thumbnail2_data, 'my_reserved_key': 1}"""
