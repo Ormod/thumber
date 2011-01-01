@@ -23,12 +23,12 @@ class Thumber(object):
             self.plugins = [self.create_thumbnails]
         self.thumb_indexer = ThumberIndex(reserved_keys)
 
-    def create_thumbs_and_index(self, data_blob, extra_reserved_keys = None):
+    def create_thumbs_and_index(self, data_blob, extra_keys_dict = None):
         """Create thumbnails and an index, and add possible additional keys to the file index"""
         result_dict = {}
         for plugin in self.plugins:
             result_dict.update(plugin(data_blob))
-        return self.thumb_indexer.create_thumbnail_blob_with_index(result_dict, extra_reserved_keys = extra_reserved_keys)
+        return self.thumb_indexer.create_thumbnail_blob_with_index(result_dict, extra_keys_dict = extra_keys_dict)
 
     def create_thumbnails(self, data_blob):
         """Create required thumbnails, sizes are set in object instance creation time"""
@@ -51,11 +51,16 @@ class ThumberIndex(object):
         else:
             self.reserved_keys = []
 
-    def create_thumbnail_blob_with_index(self, result_dict, extra_reserved_keys = None):
+    def create_thumbnail_blob_with_index(self, result_dict, extra_keys_dict = None):
         """Expects a dict like {'128x128xjpg': thumbnail_data, '64x64xjpg': thumbnail2_data, 'my_reserved_key': 1}"""
         header, data, current_offset = {'version': INDEX_VERSION}, [], 0
+        if extra_keys_dict:
+            result_dict.update(extra_keys_dict)
+        else:
+            extra_keys_dict = {}
+
         for k, v in result_dict.items():
-            if k not in self.reserved_keys:
+            if k not in self.reserved_keys + extra_keys_dict.keys():
                 offsets = [current_offset, current_offset + len(v)]
                 header[k] = offsets
                 current_offset += len(v)
@@ -72,6 +77,9 @@ class ThumberIndex(object):
         If thumbnail_key has been given, returns the blob in question
         otherwise return a thumbnail_dict with all available thumbnail sizes
         """
+        if not extra_reserved_keys:
+            extra_reserved_keys = []
+
         header_length = int(struct.unpack("H", data_blob[:2])[0])
         header = json.loads(data_blob[2:2 + header_length])
         total_header_length = header_length + 2
@@ -82,7 +90,7 @@ class ThumberIndex(object):
 
         return_dict = {}
         for k, v in header.items():
-            if k not in self.reserved_keys:
+            if k not in self.reserved_keys + extra_reserved_keys:
                 return_dict[k] = data_blob[total_header_length + v[0]:total_header_length + v[1]]
             else:
                 return_dict[k] = v
