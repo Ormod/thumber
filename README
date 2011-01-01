@@ -1,0 +1,20 @@
+Thumber:
+
+Is a library for creating thumbnails and more importantly, an index for them. 
+
+The primary use case for this library is to create n+1 thumbnails out of a single media file 
+and then create a single blob out of these with an index for easy access to individual thumbnails.
+Usage:
+
+thumber store <input_image_file> <output_thumbnail_index_file>
+thumber load <input_thumbnail_index> <size> <output_thumbnail_image.jpg>
+
+Format of the index file is:
+<2 byte header length><json header><thumbnail 1><thumbnail n>
+
+Json header:
+{'128x128xjpg': [start_offset, end_offset], '32x32xjpg': [start_offset, end_offset]}
+
+For licensing check the LICENSE file.
+
+Copyright Hannu Valtonen 2011
