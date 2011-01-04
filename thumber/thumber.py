@@ -12,48 +12,61 @@ INDEX_VERSION = 1
 
 class Thumber(object):
     """Thumber librarys main class, use this if you want to use everything"""
-    def __init__(self, thumbnail_sizes = None, reserved_keys = None, plugins = None):
+    def __init__(self, thumbnail_sizes = None, reserved_keys = None, file_types = None):
         if thumbnail_sizes:
             self.thumbnail_sizes = thumbnail_sizes
         else:
             self.thumbnail_sizes = ((128, 128), (64, 64), (32, 32)) #default sizes
-        if plugins:
-            self.plugins = plugins
+        if file_types:
+            self.file_types = []
+            for file_type in file_types:
+                if file_type == "jpg":
+                    self.file_types.append("jpeg")
+                else:
+                    self.file_types.append("jpg")
         else:
-            self.plugins = [self.create_thumbnails]
+            self.file_types = ['jpeg', 'gif', 'png']
+
         self.thumb_indexer = ThumberIndex(reserved_keys)
 
     def create_thumbs_and_index(self, data_blob, extra_keys_dict = None):
         """Create thumbnails and an index, and add possible additional keys to the file index"""
-        result_dict = {}
-        for plugin in self.plugins:
-            result_dict.update(plugin(data_blob))
+        result_dict = self.create_thumbnails(data_blob)
         return self.thumb_indexer.create_thumbnail_blob_with_index(result_dict, extra_keys_dict = extra_keys_dict)
 
     def create_thumbnails(self, data_blob):
         """Create required thumbnails, sizes are set in object instance creation time"""
         image = Image.open(StringIO.StringIO(data_blob))
         result_dict = {}
-        for thumbnail_size in self.thumbnail_sizes:
-            image.thumbnail(thumbnail_size, Image.ANTIALIAS)
-            file_buffer = StringIO.StringIO()
-            if image.mode != "RGB":
-                image = image.convert("RGB")
-            image.save(file_buffer, format = 'JPEG')
-            result_dict[str(thumbnail_size[0]) + "x" + str(thumbnail_size[1]) + "xjpg"] = file_buffer.getvalue()
+        for file_type in self.file_types:
+            for thumbnail_size in self.thumbnail_sizes:
+                if image.size[0] <= thumbnail_size[0] or image.size[1] <= thumbnail_size[1]:
+                    image.thumbnail((image.size[0], image.size[1]), Image.ANTIALIAS)
+                else:
+                    image.thumbnail(thumbnail_size, Image.ANTIALIAS)
+                file_buffer = StringIO.StringIO()
+                if image.mode != "RGB":
+                    image = image.convert("RGB")
+
+                image.save(file_buffer, format = file_type)
+                if file_type == "jpeg":
+                    result_dict[str(thumbnail_size[0]) + "x" + str(thumbnail_size[1]) + "xjpg"] = file_buffer.getvalue()
+                else:
+                    result_dict[str(thumbnail_size[0]) + "x" + str(thumbnail_size[1]) + "x" + file_type] = file_buffer.getvalue()
+
         return result_dict
 
 class ThumberIndex(object):
     """Class for creating files with n thumbnails and an access index"""
-    def __init__(self, reserved_keys):
+    def __init__(self, reserved_keys = None):
         if reserved_keys:
             self.reserved_keys = reserved_keys
         else:
-            self.reserved_keys = ['version']
-
+            self.reserved_keys = []
+            
     def create_thumbnail_blob_with_index(self, result_dict, extra_keys_dict = None):
         """Expects a dict like {'128x128xjpg': thumbnail_data, '64x64xjpg': thumbnail2_data, 'my_reserved_key': 1}"""
-        header, data, current_offset = {'version': INDEX_VERSION}, [], 0
+        header, data, current_offset = {}, [], 0
         if extra_keys_dict:
             result_dict.update(extra_keys_dict)
         else:
@@ -68,7 +81,7 @@ class ThumberIndex(object):
             else:
                 header[k] = v
         json_header = json.dumps(header)
-        data_list = [struct.pack("H", len(json_header)), json_header]
+        data_list = [struct.pack("HH", INDEX_VERSION, len(json_header)), json_header]
         data_list.extend(data)
         return ''.join(data_list)
 
@@ -80,9 +93,9 @@ class ThumberIndex(object):
         if not extra_reserved_keys:
             extra_reserved_keys = []
 
-        header_length = int(struct.unpack("H", data_blob[:2])[0])
-        header = json.loads(data_blob[2:2 + header_length])
-        total_header_length = header_length + 2
+        index_version, header_length = struct.unpack("HH", data_blob[:4])
+        header = json.loads(data_blob[4:4 + header_length])
+        total_header_length = header_length + 4
 
         if thumbnail_key:
             start_offset, stop_offset = header[thumbnail_key]
@@ -113,7 +126,7 @@ def main():
             data_blob = a.create_thumbs_and_index(input_data)
             output_filename = sys.argv[3]
         elif sys.argv[1] == "load" and len(sys.argv) == 5:
-            data_blob = a.thumb_indexer.read_thumbnail_blob_with_index(input_data, sys.argv[3] + "xjpg")
+            data_blob = a.thumb_indexer.read_thumbnail_blob_with_index(input_data, sys.argv[3])
             output_filename = sys.argv[4]
         else:
             help_msg()
