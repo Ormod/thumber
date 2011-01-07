@@ -36,10 +36,11 @@ class Thumber(object):
 
     def create_thumbnails(self, data_blob):
         """Create required thumbnails, sizes are set in object instance creation time"""
-        image = Image.open(StringIO.StringIO(data_blob))
         result_dict = {}
         for file_type in self.file_types:
             for thumbnail_size in self.thumbnail_sizes:
+                image = Image.open(StringIO.StringIO(data_blob))
+
                 if image.size[0] <= thumbnail_size[0] or image.size[1] <= thumbnail_size[1]:
                     image.thumbnail((image.size[0], image.size[1]), Image.ANTIALIAS)
                 else:
