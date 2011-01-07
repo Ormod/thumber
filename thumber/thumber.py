@@ -23,7 +23,7 @@ class Thumber(object):
                 if file_type == "jpg":
                     self.file_types.append("jpeg")
                 else:
-                    self.file_types.append("jpg")
+                    self.file_types.append(file_type)
         else:
             self.file_types = ['jpeg', 'gif', 'png']
 
