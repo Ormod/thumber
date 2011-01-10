@@ -3,6 +3,14 @@ Author Hannu Valtonen"""
 import Image
 import struct
 import StringIO
+import sys
+
+try:
+    import pyffmpeg
+    PYFFMPEG = True
+except:
+    print "pyffmpeg not found"
+    PYFFMPEG = False
 try:
     import json
 except:
@@ -29,18 +37,33 @@ class Thumber(object):
 
         self.thumb_indexer = ThumberIndex(reserved_keys)
 
-    def create_thumbs_and_index(self, data_blob, extra_keys_dict = None):
+    def create_thumbs_and_index(self, file_path = None, data_blob = None, extra_keys_dict = None):
         """Create thumbnails and an index, and add possible additional keys to the file index"""
-        result_dict = self.create_thumbnails(data_blob)
+        if data_blob:
+            input_data = StringIO.StringIO(data_blob)
+        else:
+            input_data = file_path
+
+        result_dict = self.create_thumbnails(input_data)
         return self.thumb_indexer.create_thumbnail_blob_with_index(result_dict, extra_keys_dict = extra_keys_dict)
 
-    def create_thumbnails(self, data_blob):
+    def create_thumbnails(self, input_data):
         """Create required thumbnails, sizes are set in object instance creation time"""
         result_dict = {}
         for file_type in self.file_types:
             for thumbnail_size in self.thumbnail_sizes:
-                image = Image.open(StringIO.StringIO(data_blob))
-
+                try:
+                    image = Image.open(input_data)
+                except:
+                    if PYFFMPEG:
+                        try:
+                            s = pyffmpeg.VideoStream()
+                            s.open(input_data)
+                            image = s.GetFrameNo(0)
+                        except:
+                            sys.exit(-1)
+                    else:
+                        sys.exit(-1)
                 if image.size[0] <= thumbnail_size[0] or image.size[1] <= thumbnail_size[1]:
                     image.thumbnail((image.size[0], image.size[1]), Image.ANTIALIAS)
                 else:
@@ -119,14 +142,13 @@ def help_msg():
 
 def main():
     """Entry point for thumber console script"""
-    import sys
     if len(sys.argv) >= 4:
         a = Thumber()
-        input_data = file(sys.argv[2], "rb").read()
         if sys.argv[1] == "store":
-            data_blob = a.create_thumbs_and_index(input_data)
+            data_blob = a.create_thumbs_and_index(file_path = sys.argv[2])
             output_filename = sys.argv[3]
         elif sys.argv[1] == "load" and len(sys.argv) == 5:
+            input_data = file(sys.argv[2], "rb").read()
             data_blob = a.thumb_indexer.read_thumbnail_blob_with_index(input_data, sys.argv[3])
             output_filename = sys.argv[4]
         else:
