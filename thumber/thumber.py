@@ -9,8 +9,13 @@ try:
     import pyffmpeg
     PYFFMPEG = True
 except:
-    print "pyffmpeg not found"
-    PYFFMPEG = False
+    sys.path.insert(-1, "/usr/lib/python2.6/site-packages/")
+    try:
+        import pyffmpeg
+        PYFFMPEG = True
+    except:
+        PYFFMPEG = False
+        print "pyffmpeg not found"
 try:
     import json
 except:
