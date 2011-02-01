@@ -1,27 +1,30 @@
 """Thumber Library
 Author Hannu Valtonen"""
-import Image
 import struct
-import StringIO
 import sys
+from cStringIO import StringIO
+
+import Image
+
+try:
+    import json
+except ImportError:
+    import simplejson as json
 
 try:
     import pyffmpeg
-    PYFFMPEG = True
-except:
+except ImportError:
+    # pyffmpeg .deb is slightly broken, try to work around it.
     sys.path.insert(-1, "/usr/lib/python2.6/site-packages/")
     try:
         import pyffmpeg
-        PYFFMPEG = True
-    except:
-        PYFFMPEG = False
-        print "pyffmpeg not found"
-try:
-    import json
-except:
-    import simplejson as json
+    except ImportError:
+        pyffmpeg = None
 
 INDEX_VERSION = 1
+
+class ThumberError(Exception):
+    """Thumber error"""
 
 class Thumber(object):
     """Thumber librarys main class, use this if you want to use everything"""
@@ -45,7 +48,7 @@ class Thumber(object):
     def create_thumbs_and_index(self, file_path = None, data_blob = None, extra_keys_dict = None):
         """Create thumbnails and an index, and add possible additional keys to the file index"""
         if data_blob:
-            input_data = StringIO.StringIO(data_blob)
+            input_data = StringIO(data_blob)
         else:
             input_data = file_path
 
@@ -54,26 +57,54 @@ class Thumber(object):
 
     def create_thumbnails(self, input_data):
         """Create required thumbnails, sizes are set in object instance creation time"""
+        # Try to load the image w/ PIL and PyFFMPEG
+        try:
+            orig_image = Image.open(input_data)
+        except:
+            if not pyffmpeg:
+                raise ThumberError("Could not open image with PIL")
+            try:
+                s = pyffmpeg.VideoStream()
+                s.open(input_data)
+                orig_image = s.GetFrameNo(0)
+            except:
+                raise ThumberError("Could not open image with PIL or PyFFMPEG")
+
+        # Check EXIF tags for orientation.  The tag in question is 0x0112
+        orientation = 0
+        try:
+            tags = orig_image._getexif()
+            orientation = tags[0x0112]
+        except:
+            pass # ignore errors.
+
+        # Rotate if needed (orientation: 1 means that no rotation is needed)
+        if orientation == 2:
+            orig_image = orig_image.transpose(Image.FLIP_LEFT_RIGHT)
+        elif orientation == 3:
+            orig_image = orig_image.transpose(Image.ROTATE_180)
+        elif orientation == 4:
+            orig_image = orig_image.transpose(Image.FLIP_TOP_BOTTOM)
+        elif orientation == 5:
+            orig_image = orig_image.transpose(Image.FLIP_TOP_BOTTOM)
+            orig_image = orig_image.transpose(Image.ROTATE_270)
+        elif orientation == 6:
+            orig_image = orig_image.transpose(Image.ROTATE_270)
+        elif orientation == 7:
+            orig_image = orig_image.transpose(Image.FLIP_LEFT_RIGHT)
+            orig_image = orig_image.transpose(Image.ROTATE_270)
+        elif orientation == 8:
+            orig_image = orig_image.transpose(Image.ROTATE_90)
+
         result_dict = {}
         for file_type in self.file_types:
             for thumbnail_size in self.thumbnail_sizes:
-                try:
-                    image = Image.open(input_data)
-                except:
-                    if PYFFMPEG:
-                        try:
-                            s = pyffmpeg.VideoStream()
-                            s.open(input_data)
-                            image = s.GetFrameNo(0)
-                        except:
-                            sys.exit(-1)
-                    else:
-                        sys.exit(-1)
+                image = orig_image.copy()
                 if image.size[0] <= thumbnail_size[0] or image.size[1] <= thumbnail_size[1]:
                     image.thumbnail((image.size[0], image.size[1]), Image.ANTIALIAS)
                 else:
                     image.thumbnail(thumbnail_size, Image.ANTIALIAS)
-                file_buffer = StringIO.StringIO()
+                file_buffer = StringIO()
                 if image.mode != "RGB":
                     image = image.convert("RGB")
 
@@ -92,7 +123,7 @@ class ThumberIndex(object):
             self.reserved_keys = reserved_keys
         else:
             self.reserved_keys = []
-            
+
     def create_thumbnail_blob_with_index(self, result_dict, extra_keys_dict = None):
         """Expects a dict like {'128x128xjpg': thumbnail_data, '64x64xjpg': thumbnail2_data, 'my_reserved_key': 1}"""
         header, data, current_offset = {}, [], 0
