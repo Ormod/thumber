@@ -1,5 +1,6 @@
 """Thumber Library
 Author Hannu Valtonen"""
+
 import struct
 import sys
 from cStringIO import StringIO
@@ -14,8 +15,9 @@ except ImportError:
 try:
     import pyffmpeg
 except ImportError:
-    # pyffmpeg .deb is slightly broken, try to work around it.
-    sys.path.insert(-1, "/usr/lib/python2.6/site-packages/")
+    # pyffmpeg packaging is slightly broken, try to work around it.
+    from distutils.sysconfig import get_python_lib
+    sys.path.insert(-1, get_python_lib())
     try:
         import pyffmpeg
     except ImportError:
@@ -109,20 +111,16 @@ class Thumber(object):
                     image = image.convert("RGB")
 
                 image.save(file_buffer, format = file_type)
-                if file_type == "jpeg":
-                    result_dict[str(thumbnail_size[0]) + "x" + str(thumbnail_size[1]) + "xjpg"] = file_buffer.getvalue()
-                else:
-                    result_dict[str(thumbnail_size[0]) + "x" + str(thumbnail_size[1]) + "x" + file_type] = file_buffer.getvalue()
+                index_file_type = file_type if file_type != "jpeg" else "jpg"
+                key = "%sx%sx%s" % (thumbnail_size[0], thumbnail_size[1], index_file_type)
+                result_dict[key] = file_buffer.getvalue()
 
         return result_dict
 
 class ThumberIndex(object):
     """Class for creating files with n thumbnails and an access index"""
     def __init__(self, reserved_keys = None):
-        if reserved_keys:
-            self.reserved_keys = reserved_keys
-        else:
-            self.reserved_keys = []
+        self.reserved_keys = reserved_keys or []
 
     def create_thumbnail_blob_with_index(self, result_dict, extra_keys_dict = None):
         """Expects a dict like {'128x128xjpg': thumbnail_data, '64x64xjpg': thumbnail2_data, 'my_reserved_key': 1}"""
@@ -132,7 +130,7 @@ class ThumberIndex(object):
         else:
             extra_keys_dict = {}
 
-        for k, v in result_dict.items():
+        for k, v in result_dict.iteritems():
             if k not in self.reserved_keys + extra_keys_dict.keys():
                 offsets = [current_offset, current_offset + len(v)]
                 header[k] = offsets
@@ -162,7 +160,7 @@ class ThumberIndex(object):
             return data_blob[total_header_length + start_offset:total_header_length + stop_offset]
 
         return_dict = {}
-        for k, v in header.items():
+        for k, v in header.iteritems():
             if k not in self.reserved_keys + extra_reserved_keys:
                 return_dict[k] = data_blob[total_header_length + v[0]:total_header_length + v[1]]
             else:
@@ -178,23 +176,23 @@ def help_msg():
 
 def main():
     """Entry point for thumber console script"""
-    if len(sys.argv) >= 4:
-        a = Thumber()
-        if sys.argv[1] == "store":
-            data_blob = a.create_thumbs_and_index(file_path = sys.argv[2])
-            output_filename = sys.argv[3]
-        elif sys.argv[1] == "load" and len(sys.argv) == 5:
-            input_data = file(sys.argv[2], "rb").read()
-            data_blob = a.thumb_indexer.read_thumbnail_blob_with_index(input_data, sys.argv[3])
-            output_filename = sys.argv[4]
-        else:
-            help_msg()
-            sys.exit(0)
-        output_file = file(output_filename, "wb")
-        output_file.write(data_blob)
-        output_file.close()
+    if len(sys.argv) < 4:
+        help_msg()
+        sys.exit(1)
+    a = Thumber()
+    if sys.argv[1] == "store":
+        data_blob = a.create_thumbs_and_index(file_path = sys.argv[2])
+        output_filename = sys.argv[3]
+    elif sys.argv[1] == "load" and len(sys.argv) == 5:
+        input_data = file(sys.argv[2], "rb").read()
+        data_blob = a.thumb_indexer.read_thumbnail_blob_with_index(input_data, sys.argv[3])
+        output_filename = sys.argv[4]
     else:
         help_msg()
+        sys.exit(1)
+    output_file = file(output_filename, "wb")
+    output_file.write(data_blob)
+    output_file.close()
 
 if __name__ == "__main__":
     main()
