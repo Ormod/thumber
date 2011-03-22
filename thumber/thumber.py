@@ -100,7 +100,7 @@ class Thumber(object):
         for file_type in self.file_types:
             for thumbnail_size in self.thumbnail_sizes:
                 image = orig_image.copy()
-                if image.size[0] <= thumbnail_size[0] or image.size[1] <= thumbnail_size[1]:
+                if image.size[0] <= thumbnail_size[0] and image.size[1] <= thumbnail_size[1]:
                     image.thumbnail((image.size[0], image.size[1]), Image.ANTIALIAS)
                 else:
                     image.thumbnail(thumbnail_size, Image.ANTIALIAS)
