@@ -24,6 +24,8 @@ except ImportError:
         pyffmpeg = None
 
 INDEX_VERSION = 1
+MAX_PIXELS = 100 * 1024 * 1024 # 100 megapixels
+MAX_DIMENSION = 15000 # max dimension
 
 class ThumberError(Exception):
     """Thumber error"""
@@ -71,6 +73,14 @@ class Thumber(object):
                 orig_image = s.GetFrameNo(0)
             except:
                 raise ThumberError("Could not open image with PIL or PyFFMPEG")
+
+        # Don't even try to resize too big images
+        if orig_image.size[0] > MAX_DIMENSION or orig_image.size[1] > MAX_DIMENSION:
+            raise ThumberError("Image too large, maximum dimension %r, image size %r" % \
+                (MAX_DIMENSION, orig_image.size))
+        if orig_image.size[0] * orig_image.size[1] > MAX_PIXELS:
+            raise ThumberError("Image too large, maximum pixles %r, image size %r" % \
+                (MAX_PIXELS, orig_image.size))
 
         # Check EXIF tags for orientation.  The tag in question is 0x0112
         orientation = 0
