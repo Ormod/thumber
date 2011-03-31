@@ -31,7 +31,8 @@ class ThumberError(Exception):
 
 class Thumber(object):
     """Thumber librarys main class, use this if you want to use everything"""
-    def __init__(self, thumbnail_sizes = None, reserved_keys = None, file_types = None):
+    def __init__(self, thumbnail_sizes = None, reserved_keys = None, file_types = None, pyffmpeg_enabled = False):
+        self.pyffmpeg_enabled = pyffmpeg_enabled
         if thumbnail_sizes:
             self.thumbnail_sizes = thumbnail_sizes
         else:
@@ -64,14 +65,15 @@ class Thumber(object):
         try:
             orig_image = Image.open(input_data)
         except:
-            if not pyffmpeg:
+            if not pyffmpeg and not self.pyffmpeg_enabled:
                 raise ThumberError("Could not open image with PIL")
-            try:
-                s = pyffmpeg.VideoStream()
-                s.open(input_data)
-                orig_image = s.GetFrameNo(0)
-            except:
-                raise ThumberError("Could not open image with PIL or PyFFMPEG")
+            if pyffmpeg and self.pyffmpeg_enabled:
+                try:
+                    s = pyffmpeg.VideoStream()
+                    s.open(input_data)
+                    orig_image = s.GetFrameNo(0)
+                except:
+                    raise ThumberError("Could not open image with PIL or PyFFMPEG")
 
         # Don't even try to resize too big images
         if orig_image.size[0] > MAX_DIMENSION or orig_image.size[1] > MAX_DIMENSION:
