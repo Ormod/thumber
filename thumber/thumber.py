@@ -65,15 +65,15 @@ class Thumber(object):
         try:
             orig_image = Image.open(input_data)
         except:
-            if not pyffmpeg and not self.pyffmpeg_enabled:
+            if not (self.pyffmpeg_enabled and pyffmpeg):
                 raise ThumberError("Could not open image with PIL")
-            if pyffmpeg and self.pyffmpeg_enabled:
-                try:
-                    s = pyffmpeg.VideoStream()
-                    s.open(input_data)
-                    orig_image = s.GetFrameNo(0)
-                except:
-                    raise ThumberError("Could not open image with PIL or PyFFMPEG")
+
+            try:
+                s = pyffmpeg.VideoStream()
+                s.open(input_data)
+                orig_image = s.GetFrameNo(0)
+            except:
+                raise ThumberError("Could not open image with PIL or PyFFMPEG")
 
         # Don't even try to resize too big images
         if orig_image.size[0] > MAX_DIMENSION or orig_image.size[1] > MAX_DIMENSION:
