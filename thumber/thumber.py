@@ -3,24 +3,8 @@ Author Hannu Valtonen"""
 import struct
 import sys
 from cStringIO import StringIO
-
 import Image
-
-try:
-    import json
-except ImportError:
-    import simplejson as json
-
-try:
-    import pyffmpeg
-except ImportError:
-    # pyffmpeg packaging is slightly broken, try to work around it.
-    from distutils.sysconfig import get_python_lib
-    sys.path.insert(-1, get_python_lib())
-    try:
-        import pyffmpeg
-    except ImportError:
-        pyffmpeg = None
+import json
 
 INDEX_VERSION = 1
 MAX_PIXELS = 100 * 1024 * 1024 # 100 megapixels
@@ -31,8 +15,7 @@ class ThumberError(Exception):
 
 class Thumber(object):
     """Thumber librarys main class, use this if you want to use everything"""
-    def __init__(self, thumbnail_sizes = None, reserved_keys = None, file_types = None, pyffmpeg_enabled = False):
-        self.pyffmpeg_enabled = pyffmpeg_enabled
+    def __init__(self, thumbnail_sizes = None, reserved_keys = None, file_types = None):
         if thumbnail_sizes:
             self.thumbnail_sizes = thumbnail_sizes
         else:
@@ -49,31 +32,23 @@ class Thumber(object):
 
         self.thumb_indexer = ThumberIndex(reserved_keys)
 
-    def create_thumbs_and_index(self, file_path = None, data_blob = None, extra_keys_dict = None):
+    def create_thumbs_and_index(self, file_path = None, data_blob = None, extra_keys_dict = None, quality = 75):
         """Create thumbnails and an index, and add possible additional keys to the file index"""
         if data_blob:
             input_data = StringIO(data_blob)
         else:
             input_data = file_path
 
-        result_dict = self.create_thumbnails(input_data)
+        result_dict = self.create_thumbnails(input_data, quality)
         return self.thumb_indexer.create_thumbnail_blob_with_index(result_dict, extra_keys_dict = extra_keys_dict)
 
-    def create_thumbnails(self, input_data):
+    def create_thumbnails(self, input_data, quality = 75):
         """Create required thumbnails, sizes are set in object instance creation time"""
-        # Try to load the image w/ PIL and PyFFMPEG
+        # Try to load the image w/ PIL
         try:
             orig_image = Image.open(input_data)
         except:
-            if not (self.pyffmpeg_enabled and pyffmpeg):
-                raise ThumberError("Could not open image with PIL")
-
-            try:
-                s = pyffmpeg.VideoStream()
-                s.open(input_data)
-                orig_image = s.GetFrameNo(0)
-            except:
-                raise ThumberError("Could not open image with PIL or PyFFMPEG")
+            raise ThumberError("Could not open image with PIL")
 
         # Don't even try to resize too big images
         if orig_image.size[0] > MAX_DIMENSION or orig_image.size[1] > MAX_DIMENSION:
@@ -121,7 +96,10 @@ class Thumber(object):
                 if image.mode != "RGB":
                     image = image.convert("RGB")
 
-                image.save(file_buffer, format = file_type)
+                if file_type == 'jpeg':
+                    image.save(file_buffer, format = file_type, quality = quality)
+                else:
+                    image.save(file_buffer, format = file_type)
                 index_file_type = file_type if file_type != "jpeg" else "jpg"
                 key = "%sx%sx%s" % (thumbnail_size[0], thumbnail_size[1], index_file_type)
                 result_dict[key] = file_buffer.getvalue()
