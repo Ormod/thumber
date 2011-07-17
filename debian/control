@@ -8,5 +8,5 @@ Standards-Version: 3.8.4
 Package: thumber-python
 Architecture: all
 Depends: ${shlibs:Depends}, ${misc:Depends},
-  python-imaging (>= 1.1.7), pyffmpeg (>= 1.9)
+  python-imaging (>= 1.1.7)
 Description: Thumber Python library Use this to generate n+1 thumbnails into a single index file
