@@ -130,7 +130,7 @@ class ThumberIndex(object):
         json_header = json.dumps(header)
         data_list = [struct.pack("HH", INDEX_VERSION, len(json_header)), json_header]
         data_list.extend(data)
-        return ''.join(data_list)
+        return ''.join(data_list), header
 
     def read_thumbnail_blob_with_index(self, data_blob, thumbnail_key = None, extra_reserved_keys = None):
         """Expects a data blob created by create_thumbnail_file_with_index
@@ -170,7 +170,7 @@ def main():
         sys.exit(1)
     a = Thumber()
     if sys.argv[1] == "store":
-        data_blob = a.create_thumbs_and_index(file_path = sys.argv[2])
+        data_blob, header = a.create_thumbs_and_index(file_path = sys.argv[2])
         output_filename = sys.argv[3]
     elif sys.argv[1] == "load" and len(sys.argv) == 5:
         input_data = file(sys.argv[2], "rb").read()
