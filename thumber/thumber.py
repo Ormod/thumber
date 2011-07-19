@@ -103,6 +103,9 @@ class Thumber(object):
                 index_file_type = file_type if file_type != "jpeg" else "jpg"
                 key = "%sx%sx%s" % (thumbnail_size[0], thumbnail_size[1], index_file_type)
                 result_dict[key] = file_buffer.getvalue()
+                real_size_key = "r%sx%s" % (thumbnail_size[0], thumbnail_size[1])
+                real_size_value = "%sx%s" % (image.size[0], image.size[1])
+                result_dict[real_size_key] = real_size_value
 
         return result_dict
 
