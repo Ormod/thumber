@@ -1,12 +1,13 @@
 """Thumber Library
 Author Hannu Valtonen"""
+from cStringIO import StringIO
+import json
+import re
 import struct
 import sys
-from cStringIO import StringIO
 import Image
-import json
 
-INDEX_VERSION = 1
+INDEX_VERSION = 2
 MAX_PIXELS = 100 * 1024 * 1024 # 100 megapixels
 MAX_DIMENSION = 15000 # max dimension
 
@@ -15,7 +16,7 @@ class ThumberError(Exception):
 
 class Thumber(object):
     """Thumber librarys main class, use this if you want to use everything"""
-    def __init__(self, thumbnail_sizes = None, reserved_keys = None, file_types = None):
+    def __init__(self, thumbnail_sizes = None, file_types = None):
         if thumbnail_sizes:
             self.thumbnail_sizes = thumbnail_sizes
         else:
@@ -30,9 +31,9 @@ class Thumber(object):
         else:
             self.file_types = ['jpeg', 'gif', 'png']
 
-        self.thumb_indexer = ThumberIndex(reserved_keys)
+        self.thumb_indexer = ThumberIndex()
 
-    def create_thumbs_and_index(self, file_path = None, data_blob = None, extra_keys_dict = None, quality = 75):
+    def create_thumbs_and_index(self, file_path = None, data_blob = None, extra_data = None, quality = 75):
         """Create thumbnails and an index, and add possible additional keys to the file index"""
         if data_blob:
             input_data = StringIO(data_blob)
@@ -40,7 +41,7 @@ class Thumber(object):
             input_data = file_path
 
         result_dict = self.create_thumbnails(input_data, quality)
-        return self.thumb_indexer.create_thumbnail_blob_with_index(result_dict, extra_keys_dict = extra_keys_dict)
+        return self.thumb_indexer.create_thumbnail_blob_with_index(result_dict, extra_data)
 
     def create_thumbnails(self, input_data, quality = 75):
         """Create required thumbnails, sizes are set in object instance creation time"""
@@ -101,7 +102,7 @@ class Thumber(object):
                 else:
                     image.save(file_buffer, format = file_type)
                 index_file_type = file_type if file_type != "jpeg" else "jpg"
-                key = "%sx%sx%s" % (thumbnail_size[0], thumbnail_size[1], index_file_type)
+                key = "DATA.%sx%sx%s" % (thumbnail_size[0], thumbnail_size[1], index_file_type)
                 result_dict[key] = file_buffer.getvalue()
                 real_size_key = "r%sx%s" % (thumbnail_size[0], thumbnail_size[1])
                 real_size_value = "%sx%s" % (image.size[0], image.size[1])
@@ -111,50 +112,64 @@ class Thumber(object):
 
 class ThumberIndex(object):
     """Class for creating files with n thumbnails and an access index"""
-    def __init__(self, reserved_keys = None):
-        self.reserved_keys = reserved_keys or []
-
-    def create_thumbnail_blob_with_index(self, result_dict, extra_keys_dict = None):
+    def create_thumbnail_blob_with_index(self, results, extra_data):
         """Expects a dict like {'128x128xjpg': thumbnail_data, '64x64xjpg': thumbnail2_data, 'my_reserved_key': 1}"""
-        header, data, current_offset = {}, [], 0
-        if extra_keys_dict:
-            result_dict.update(extra_keys_dict)
+        header, blobs = {}, []
+        header_alloc = len(results) * (16 * 3)
+
+        if extra_data:
+            results = dict(results.items() + extra_data.items())
+            header_alloc += len(json.dumps(extra_data))
         else:
-            extra_keys_dict = {}
+            extra_data = {}
 
-        for k, v in result_dict.iteritems():
-            if k not in self.reserved_keys + extra_keys_dict.keys():
-                offsets = [current_offset, current_offset + len(v)]
-                header[k] = offsets
-                current_offset += len(v)
-                data.append(v)
+        offset = header_alloc
+        for k, v in results.iteritems():
+            if k.startswith("DATA."):
+                # Store offsets in "start-end" byte ranges from beginning of the file
+                k = k[5:]
+                begin = offset
+                end = offset + len(v)
+                offset = end
+                blobs.append(v)
+                header[k] = "%d-%d" % (begin, end)
             else:
+                # Something else, store as-is
                 header[k] = v
-        json_header = json.dumps(header)
-        data_list = [struct.pack("HH", INDEX_VERSION, len(json_header)), json_header]
-        data_list.extend(data)
-        return ''.join(data_list), header
 
-    def read_thumbnail_blob_with_index(self, data_blob, thumbnail_key = None, extra_reserved_keys = None):
+        json_header = json.dumps(header)
+        padding = header_alloc - len(json_header) - 4
+        assert padding >= 0, "Header allocation %r < data size %r" % (header_alloc, len(json_header))
+        data = [struct.pack("HH", INDEX_VERSION, len(json_header)), json_header, padding * "\x00"] + blobs
+        return ''.join(data), header
+
+    def read_thumbnail_blob_with_index(self, data_blob, thumbnail_key = None):
         """Expects a data blob created by create_thumbnail_file_with_index
         If thumbnail_key has been given, returns the blob in question
         otherwise return a thumbnail_dict with all available thumbnail sizes
         """
-        if not extra_reserved_keys:
-            extra_reserved_keys = []
-
         index_version, header_length = struct.unpack("HH", data_blob[:4])
         header = json.loads(data_blob[4:4 + header_length])
         total_header_length = header_length + 4
 
+        def get_offsets(offsets):
+            if index_version == 2:
+                start_offset, _, end_offset = offsets.partition("-")
+            elif index_version == 1:
+                start_offset = offsets[0] + total_header_length
+                end_offset = offsets[1] + total_header_length
+            return int(start_offset), int(end_offset)
+
         if thumbnail_key:
-            start_offset, stop_offset = header[thumbnail_key]
-            return data_blob[total_header_length + start_offset:total_header_length + stop_offset]
+            start_offset, end_offset = get_offsets(header[thumbnail_key])
+            return data_blob[start_offset:end_offset]
 
         return_dict = {}
+        pat = re.compile("^[0-9]+x[0-9]+x[a-z]+$")
         for k, v in header.iteritems():
-            if k not in self.reserved_keys + extra_reserved_keys:
-                return_dict[k] = data_blob[total_header_length + v[0]:total_header_length + v[1]]
+            if pat.match(k):
+                start_offset, end_offset = get_offsets(v)
+                return_dict[k] = data_blob[start_offset:end_offset]
             else:
                 return_dict[k] = v
         return return_dict
