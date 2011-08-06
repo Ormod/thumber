@@ -33,17 +33,17 @@ class Thumber(object):
 
         self.thumb_indexer = ThumberIndex()
 
-    def create_thumbs_and_index(self, file_path = None, data_blob = None, extra_data = None, quality = 75):
+    def create_thumbs_and_index(self, file_path = None, data_blob = None, extra_data = None, quality = 75, force_resize = False):
         """Create thumbnails and an index, and add possible additional keys to the file index"""
         if data_blob:
             input_data = StringIO(data_blob)
         else:
             input_data = file_path
 
-        result_dict = self.create_thumbnails(input_data, quality)
+        result_dict = self.create_thumbnails(input_data, quality, force_resize)
         return self.thumb_indexer.create_thumbnail_blob_with_index(result_dict, extra_data)
 
-    def create_thumbnails(self, input_data, quality = 75):
+    def create_thumbnails(self, input_data, quality = 75, force_resize = False):
         """Create required thumbnails, sizes are set in object instance creation time"""
         # Try to load the image w/ PIL
         try:
@@ -90,9 +90,16 @@ class Thumber(object):
             for thumbnail_size in self.thumbnail_sizes:
                 image = orig_image.copy()
                 if image.size[0] <= thumbnail_size[0] and image.size[1] <= thumbnail_size[1]:
-                    image.thumbnail((image.size[0], image.size[1]), Image.ANTIALIAS)
+                    if force_resize:
+                        image = image.resize((image.size[0], image.size[1]), Image.ANTIALIAS)
+                    else:
+                        image.thumbnail((image.size[0], image.size[1]), Image.ANTIALIAS)
                 else:
-                    image.thumbnail(thumbnail_size, Image.ANTIALIAS)
+                    if force_resize:
+                        image = image.resize(thumbnail_size, Image.ANTIALIAS)
+                    else:
+                        image.thumbnail(thumbnail_size, Image.ANTIALIAS)
+
                 file_buffer = StringIO()
                 if image.mode != "RGB":
                     image = image.convert("RGB")
